@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>四川麻将听牌计算器</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            margin: 0;
+            padding: 10px;
+            padding-top: 20px;
+        }
+        .app-container {
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+            padding: 15px;
+            width: 100%;
+            max-width: 600px;
+        }
+        h2 {
+            text-align: center;
+            color: #2c3e50;
+            margin-top: 0;
+            margin-bottom: 15px;
+            font-weight: 500;
+            font-size: 18px;
+            letter-spacing: 1px;
+        }
+        
+        /* 牌面网格布局 */
+        .mahjong-grid {
+            display: grid;
+            grid-template-columns: repeat(9, 1fr);
+            gap: 6px;
+            margin-bottom: 10px;
+        }
+        
+        /* 单张牌的样式 */
+        .tile {
+            background: #ffffff;
+            border: 1.5px solid #333;
+            border-radius: 6px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 65px;
+            cursor: pointer;
+            position: relative;
+            transition: transform 0.1s, box-shadow 0.1s;
+            box-shadow: 1px 1px 3px rgba(0,0,0,0.05);
+            /* 修改：允许角标溢出显示 */
+            overflow: visible; 
+        }
+        .tile:active {
+            transform: scale(0.92);
+            background: #f9f9f9;
+        }
+        
+        /* 牌面图片样式 */
+        .tile-img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain; /* 保持图片比例 */
+            pointer-events: none; /* 防止图片阻挡点击 */
+            border-radius: 5px; /* 单独给图片加圆角 */
+        }
+
+        /* 图片加载失败时的文字回退 */
+        .tile-text {
+            display: none; /* 默认隐藏，由JS控制显示 */
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 100%;
+        }
+        .tile-text .num {
+            font-size: 18px;
+            font-weight: bold;
+            line-height: 1.2;
+        }
+        .tile-text .suit {
+            font-size: 11px;
+            margin-top: 1px;
+        }
+        
+        /* 花色颜色 */
+        .tile.wan .tile-text .num, .tile.wan .tile-text .suit { color: #c0392b; }
+        .tile.tong .tile-text .num, .tile.tong .tile-text .suit { color: #2980b9; }
+        .tile.tiao .tile-text .num, .tile.tiao .tile-text .suit { color: #2e7d32; }
+
+        /* 右上角数量角标（修复了位置和层级） */
+        .badge {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            background: #e74c3c;
+            color: white;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 11px;
+            font-weight: bold;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            border: 1px solid #fff;
+            z-index: 10; /* 确保在最上层 */
+        }
+
+        /* 信息提示栏 */
+        .info-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #f8f9fa;
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            border: 1px solid #e9ecef;
+            font-size: 13px;
+            color: #555;
+        }
+        .info-text span {
+            font-weight: bold;
+            color: #2c3e50;
+            font-size: 15px;
+        }
+
+        /* 手牌预览框 */
+        .hand-preview {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 3px;
+            justify-content: center;
+            align-items: center;
+            min-height: 54px;
+            background: #fdfdfd;
+            border: 1px dashed #ddd;
+            border-radius: 8px;
+            padding: 8px 6px;
+            margin-bottom: 15px;
+            overflow: visible; /* 修复预览框角标 */
+        }
+        
+        /* 预览牌的小尺寸样式 */
+        .preview-tile {
+            background: white;
+            border: 1.5px solid #333;
+            border-radius: 5px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            width: 30px;  
+            height: 42px; 
+            box-shadow: 1px 1px 2px rgba(0,0,0,0.05);
+            flex-shrink: 0;
+            overflow: visible; /* 修复 */
+        }
+        .preview-tile .p-img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            pointer-events: none;
+            border-radius: 4px;
+        }
+        .preview-tile .p-text {
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 100%;
+        }
+        .preview-tile .p-num {
+            font-size: 15px; 
+            font-weight: bold;
+            line-height: 1;
+        }
+        .preview-tile .p-suit {
+            font-size: 10px; 
+            line-height: 1;
+            margin-top: 2px;
+        }
+        .preview-tile.wan .p-text { color: #c0392b; border-color: #c0392b; }
+        .preview-tile.tong .p-text { color: #2980b9; border-color: #2980b9; }
+        .preview-tile.tiao .p-text { color: #2e7d32; border-color: #2e7d32; }
+
+        /* 操作按钮 */
+        .controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+        button {
+            padding: 12px 20px;
+            font-size: 15px;
+            font-weight: bold;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
+        }
+        button:active { transform: scale(0.96); }
+        .btn-calc {
+            background: #27ae60;
+            color: white;
+            flex: 1;
+        }
+        .btn-calc:active { background: #219a52; }
+        .btn-clear {
+            background: #e0e0e0;
+            color: #333;
+            flex: 0 0 100px;
+        }
+        .btn-clear:active { background: #d5d5d5; }
+
+        /* 结果显示区域 */
+        .result-area {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 15px;
+            min-height: 80px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .result-title {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 10px;
+        }
+        .result-cards {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+        }
+        
+        /* 结果牌面样式 */
+        .result-card {
+            background: white;
+            border: 1.5px solid #333;
+            border-radius: 6px;
+            padding: 6px;
+            box-shadow: 1px 1px 3px rgba(0,0,0,0.05);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-width: 58px;
+            min-height: 64px;
+            overflow: visible; /* 修复 */
+        }
+        .result-card .r-img {
+            width: 100%;
+            height: 40px; /* 固定高度，保持修长 */
+            object-fit: contain;
+            pointer-events: none;
+            border-radius: 4px;
+        }
+        .result-card .r-text {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+        }
+        .result-card .r-name {
+            font-size: 18px;
+            font-weight: bold;
+            line-height: 1.2;
+        }
+        .result-card .r-remaining {
+            font-size: 12px;
+            margin-top: 4px;
+            font-weight: normal;
+            opacity: 0.8;
+        }
+        .result-card .r-remaining-img {
+            font-size: 12px;
+            margin-top: 4px;
+            font-weight: normal;
+            opacity: 0.8;
+        }
+        
+        /* 花色颜色继承 */
+        .result-card.wan .r-text { color: #c0392b; }
+        .result-card.tong .r-text { color: #2980b9; }
+        .result-card.tiao .r-text { color: #2e7d32; }
+        
+        .result-empty {
+            color: #999;
+            font-size: 14px;
+            text-align: center;
+        }
+        .error-msg {
+            color: #e74c3c;
+            font-size: 14px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <h2>选择您手里现有的牌</h2>
+    
+    <div class="mahjong-grid" id="mahjongGrid">
+        <!-- 动态生成 -->
+    </div>
+
+    <div class="info-bar">
+        <div class="info-text">当前手牌：<span id="handCount">0</span> 张</div>
+        <div class="info-text">碰/杠：<span id="fixedMelds">0</span> 个</div>
+    </div>
+
+    <div class="hand-preview" id="handPreview">
+        <span style="color:#ccc; font-size:12px;">手牌预览区</span>
+    </div>
+
+    <div class="controls">
+        <button class="btn-calc" onclick="calculate()">刷新计算结果</button>
+        <button class="btn-clear" onclick="clearHand()">清空</button>
+    </div>
+
+    <div class="result-area" id="resultArea">
+        <div class="result-empty">点击牌面添加，长按牌面可减少</div>
+    </div>
+</div>
+
+<script>
+    // ==================== 数据与逻辑 ====================
+    const SUITS = ['万', '筒', '条'];
+    const TILE_DATA = [];
+    const ROWS = [
+        { suit: '筒', class: 'tong' },
+        { suit: '条', class: 'tiao' },
+        { suit: '万', class: 'wan' }
+    ];
+    
+    ROWS.forEach(row => {
+        for (let i = 1; i <= 9; i++) {
+            TILE_DATA.push({
+                id: `${i}${row.suit}`,
+                suit: row.suit,
+                class: row.class,
+                num: i,
+                count: 0
+            });
+        }
+    });
+
+    function cardToNum(cardStr) {
+        const num = parseInt(cardStr[0]);
+        const suitIdx = SUITS.indexOf(cardStr[1]);
+        return suitIdx * 9 + (num - 1);
+    }
+
+    function numToCard(num) {
+        const suit = SUITS[Math.floor(num / 9)];
+        const n = (num % 9) + 1;
+        return `${n}${suit}`;
+    }
+
+    function canFormMelds(count, needMelds) {
+        if (needMelds === 0) return count.every(c => c === 0);
+        let i = 0;
+        while (i < 27 && count[i] === 0) i++;
+        if (i === 27) return false;
+
+        if (count[i] >= 3) {
+            count[i] -= 3;
+            if (canFormMelds(count, needMelds - 1)) { count[i] += 3; return true; }
+            count[i] += 3;
+        }
+
+        const suit = Math.floor(i / 9);
+        const num = i % 9;
+        if (num <= 6 && Math.floor((i + 1) / 9) === suit && Math.floor((i + 2) / 9) === suit) {
+            if (count[i + 1] > 0 && count[i + 2] > 0) {
+                count[i]--; count[i + 1]--; count[i + 2]--;
+                if (canFormMelds(count, needMelds - 1)) { count[i]++; count[i + 1]++; count[i + 2]++; return true; }
+                count[i]++; count[i + 1]++; count[i + 2]++;
+            }
+        }
+        return false;
+    }
+
+    function checkHu(cards, fixedMelds) {
+        if (cards.length !== 14 - 3 * fixedMelds) return false;
+        const suits = new Set(cards.map(c => Math.floor(c / 9)));
+        if (suits.size > 2) return false;
+        const cnt = {};
+        cards.forEach(c => cnt[c] = (cnt[c] || 0) + 1);
+        if (Object.values(cnt).some(v => v > 4)) return false;
+        if (fixedMelds === 0) {
+            if (Object.values(cnt).every(v => v % 2 === 0)) return true;
+        }
+        const count = new Array(27).fill(0);
+        cards.forEach(c => count[c]++);
+        const needMelds = 4 - fixedMelds;
+        for (let i = 0; i < 27; i++) {
+            if (count[i] >= 2) {
+                count[i] -= 2;
+                if (canFormMelds(count, needMelds)) { count[i] += 2; return true; }
+                count[i] += 2;
+            }
+        }
+        return false;
+    }
+
+    function findHuCards(hand) {
+        const diff = 13 - hand.length;
+        if (diff < 0 || diff % 3 !== 0) return { error: "手牌数量不符合规则（应为 13/10/7/4/1 张）" };
+        const fixedMelds = diff / 3;
+        if (fixedMelds > 4) return { error: "碰/杠数量不能超过4个" };
+
+        const cnt = {};
+        hand.forEach(c => cnt[c] = (cnt[c] || 0) + 1);
+        const huCards = [];
+        for (let card = 0; card < 27; card++) {
+            if ((cnt[card] || 0) >= 4) continue;
+            if (checkHu([...hand, card], fixedMelds)) huCards.push(card);
+        }
+        return { fixedMelds, huCards };
+    }
+
+    // ==================== 渲染图片与文字回退逻辑 ====================
+    function getTileHTML(tileId, num, suit, className, isPreview = false) {
+        const imgPath = `images/${tileId}.png`; // 图片路径
+        const textHTML = `
+            <div class="${isPreview ? 'p-text' : 'tile-text'}">
+                <div class="${isPreview ? 'p-num' : 'num'}">${num}</div>
+                <div class="${isPreview ? 'p-suit' : 'suit'}">${suit}</div>
+            </div>
+        `;
+        const imgHTML = `<img src="${imgPath}" class="${isPreview ? 'p-img' : 'tile-img'}" 
+            onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">`;
+        
+        return imgHTML + textHTML;
+    }
+
+    function getResultCardHTML(cardStr, className, remaining) {
+        const imgPath = `images/${cardStr}.png`;
+        const textHTML = `
+            <div class="r-text">
+                <div class="r-name">${cardStr}</div>
+                <div class="r-remaining">${remaining}张</div>
+            </div>
+        `;
+        const imgHTML = `
+            <img src="${imgPath}" class="r-img" 
+                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+            <div class="r-remaining-img">${remaining}张</div>
+        `;
+        return `
+            <div class="result-card ${className}">
+                ${imgHTML}
+                ${textHTML}
+            </div>
+        `;
+    }
+
+    // ==================== UI 交互逻辑 ====================
+    const gridEl = document.getElementById('mahjongGrid');
+    const handCountEl = document.getElementById('handCount');
+    const fixedMeldsEl = document.getElementById('fixedMelds');
+    const resultArea = document.getElementById('resultArea');
+    const handPreviewEl = document.getElementById('handPreview');
+
+    function renderGrid() {
+        gridEl.innerHTML = '';
+        TILE_DATA.forEach(tile => {
+            const div = document.createElement('div');
+            div.className = `tile ${tile.class}`;
+            div.dataset.id = tile.id;
+
+            div.innerHTML = getTileHTML(tile.id, tile.num, tile.suit, tile.class);
+
+            div.addEventListener('click', () => {
+                if (tile.count < 4) {
+                    tile.count++;
+                    updateTileUI(tile, div);
+                    updateHandInfo();
+                }
+            });
+
+            div.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                if (tile.count > 0) {
+                    tile.count--;
+                    updateTileUI(tile, div);
+                    updateHandInfo();
+                }
+            });
+
+            let pressTimer;
+            div.addEventListener('touchstart', (e) => {
+                pressTimer = setTimeout(() => {
+                    if (tile.count > 0) {
+                        tile.count--;
+                        updateTileUI(tile, div);
+                        updateHandInfo();
+                    }
+                }, 600);
+            });
+            div.addEventListener('touchend', () => clearTimeout(pressTimer));
+            div.addEventListener('touchmove', () => clearTimeout(pressTimer));
+
+            gridEl.appendChild(div);
+        });
+    }
+
+    function updateTileUI(tile, div) {
+        const oldBadge = div.querySelector('.badge');
+        if (oldBadge) oldBadge.remove();
+
+        if (tile.count > 0) {
+            const badge = document.createElement('div');
+            badge.className = 'badge';
+            badge.textContent = tile.count;
+            badge.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (tile.count > 0) {
+                    tile.count--;
+                    updateTileUI(tile, div);
+                    updateHandInfo();
+                }
+            });
+            div.appendChild(badge);
+        }
+    }
+
+    function updateHandInfo() {
+        let totalCount = 0;
+        TILE_DATA.forEach(t => totalCount += t.count);
+
+        const diff = 13 - totalCount;
+        let fixedMelds = 0;
+        if (diff >= 0 && diff % 3 === 0) fixedMelds = diff / 3;
+
+        handCountEl.textContent = totalCount;
+        fixedMeldsEl.textContent = fixedMelds;
+
+        // 更新手牌预览框
+        handPreviewEl.innerHTML = '';
+        if (totalCount === 0) {
+            handPreviewEl.innerHTML = '<span style="color:#ccc; font-size:12px;">手牌预览区</span>';
+        } else {
+            TILE_DATA.forEach(tile => {
+                for (let i = 0; i < tile.count; i++) {
+                    const div = document.createElement('div');
+                    div.className = `preview-tile ${tile.class}`;
+                    div.innerHTML = getTileHTML(tile.id, tile.num, tile.suit, tile.class, true);
+                    handPreviewEl.appendChild(div);
+                }
+            });
+        }
+
+        calculate(); // 自动计算
+    }
+
+    function getSelectedHand() {
+        const hand = [];
+        TILE_DATA.forEach(tile => {
+            for (let i = 0; i < tile.count; i++) hand.push(cardToNum(tile.id));
+        });
+        return hand;
+    }
+
+    function calculate() {
+        const hand = getSelectedHand();
+        const totalCount = hand.length;
+
+        if (totalCount === 0) {
+            resultArea.innerHTML = '<div class="result-empty">点击牌面添加，长按牌面可减少</div>';
+            return;
+        }
+
+        const result = findHuCards(hand);
+        if (result.error) {
+            resultArea.innerHTML = `<div class="result-empty" style="color:#aaa;">${result.error}</div>`;
+            return;
+        }
+
+        const { fixedMelds, huCards } = result;
+        if (huCards.length === 0) {
+            resultArea.innerHTML = '<div class="result-empty">没有能胡的牌</div>';
+            return;
+        }
+
+        const handCounts = {};
+        hand.forEach(c => handCounts[c] = (handCounts[c] || 0) + 1);
+
+        let html = `<div class="result-title">能胡的牌（共 ${huCards.length} 张）：</div>`;
+        html += '<div class="result-cards">';
+        
+        huCards.forEach(card => {
+            const str = numToCard(card);
+            const suit = str[1];
+            let cls = 'wan';
+            if (suit === '筒') cls = 'tong';
+            if (suit === '条') cls = 'tiao';
+            
+            const inHand = handCounts[card] || 0;
+            const remaining = 4 - inHand;
+            
+            html += getResultCardHTML(str, cls, remaining);
+        });
+        html += '</div>';
+        resultArea.innerHTML = html;
+    }
+
+    function clearHand() {
+        TILE_DATA.forEach(tile => tile.count = 0);
+        renderGrid();
+        updateHandInfo();
+    }
+
+    // 初始化
+    renderGrid();
+    updateHandInfo();
+
+</script>
+</body>
+</html>
